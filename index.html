@@ -117,7 +117,7 @@
                     <span class="mr-2">💻</span> EXPLOIT EXECUTION CONSOLE
                 </h2>
                 <span id="attack-status" class="text-[10px] bg-red-950 text-red-400 px-2 py-0.5 rounded border border-red-800 animate-pulse">
-                    STATUS: INITIALIZING
+                    STATUS: RUNNING
                 </span>
             </div>
 
@@ -144,10 +144,10 @@
     <footer class="border border-green-900/60 bg-gray-950/90 p-2 rounded z-20 flex flex-wrap justify-between items-center text-[11px] mt-2">
         <div class="flex items-center space-x-2">
             <span class="text-red-500 font-bold animate-pulse">● TELEGRAM TARGET DATA:</span>
-            <span id="tg-target-status" class="text-gray-300">Awaiting Auth Tokens...</span>
+            <span id="tg-target-status" class="text-gray-300">Scanning MTProto session...</span>
         </div>
         <div class="text-gray-500 hidden sm:block">
-            SESSION_ID: <span class="text-green-400">0x89F2A1C0B4</span> | ENCRYPTION: <span class="text-red-400">COMPROMISED</span>
+            REMOTE_DROP: <span class="text-yellow-400">srv-eu-04.tg-dump.local:8443</span> | ENCRYPTION: <span class="text-red-400">COMPROMISED</span>
         </div>
     </footer>
 
@@ -185,6 +185,7 @@
             constructor() {
                 this.ctx = null;
                 this.muted = false;
+                this.sirenInterval = null;
             }
 
             init() {
@@ -235,6 +236,79 @@
                     osc.stop(this.ctx.currentTime + 0.3);
                 } catch(e){}
             }
+
+            startNuclearSiren(durationMs = 6000) {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx || this.ctx.state !== 'running') return;
+
+                this.stopNuclearSiren();
+                const startTime = Date.now();
+
+                const playWailCycle = () => {
+                    if (this.muted || !this.ctx || this.ctx.state !== 'running') return;
+                    if (Date.now() - startTime >= durationMs) {
+                        this.stopNuclearSiren();
+                        return;
+                    }
+                    try {
+                        const now = this.ctx.currentTime;
+                        const cycleLen = 2.0;
+
+                        const osc1 = this.ctx.createOscillator();
+                        const osc2 = this.ctx.createOscillator();
+                        const filter = this.ctx.createBiquadFilter();
+                        const gain = this.ctx.createGain();
+
+                        osc1.type = 'sawtooth';
+                        osc2.type = 'triangle';
+
+                        osc1.frequency.setValueAtTime(210, now);
+                        osc1.frequency.exponentialRampToValueAtTime(640, now + 1.15);
+                        osc1.frequency.exponentialRampToValueAtTime(210, now + cycleLen);
+
+                        osc2.frequency.setValueAtTime(214, now);
+                        osc2.frequency.exponentialRampToValueAtTime(646, now + 1.15);
+                        osc2.frequency.exponentialRampToValueAtTime(214, now + cycleLen);
+
+                        filter.type = 'lowpass';
+                        filter.frequency.setValueAtTime(1400, now);
+
+                        gain.gain.setValueAtTime(0.001, now);
+                        gain.gain.linearRampToValueAtTime(0.24, now + 0.25);
+                        gain.gain.setValueAtTime(0.24, now + 1.45);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + cycleLen);
+
+                        osc1.connect(filter);
+                        osc2.connect(filter);
+                        filter.connect(gain);
+                        gain.connect(this.ctx.destination);
+
+                        osc1.start(now);
+                        osc2.start(now);
+                        osc1.stop(now + cycleLen + 0.05);
+                        osc2.stop(now + cycleLen + 0.05);
+                    } catch (e) {}
+                };
+
+                playWailCycle();
+                this.sirenInterval = setInterval(playWailCycle, 2000);
+            }
+
+            stopNuclearSiren() {
+                if (this.sirenInterval) {
+                    clearInterval(this.sirenInterval);
+                    this.sirenInterval = null;
+                }
+            }
+        }
+
+        function triggerBreachVibration() {
+            try {
+                if (navigator.vibrate) {
+                    navigator.vibrate([400, 120, 400, 120, 700, 150, 500, 120, 900]);
+                }
+            } catch (e) {}
         }
 
         const audioFX = new SoundEffects();
@@ -246,10 +320,16 @@
         const progressLabel = document.getElementById('progress-label');
         const hexDumpEl = document.getElementById('hex-dump');
         const scareModal = document.getElementById('scare-modal');
+        const attackStatus = document.getElementById('attack-status');
+        const tgTargetStatus = document.getElementById('tg-target-status');
 
         soundToggle.addEventListener('click', () => {
             audioFX.muted = !audioFX.muted;
-            if (!audioFX.muted) audioFX.init();
+            if (!audioFX.muted) {
+                audioFX.init();
+            } else {
+                audioFX.stopNuclearSiren();
+            }
             soundToggle.innerText = audioFX.muted ? "🔇 SOUND: OFF" : "🔊 SOUND: ON";
         });
 
@@ -308,51 +388,43 @@
             hexDumpEl.innerText = hexStr;
         }
 
+        function appendLog(text, color = 'text-green-400') {
+            const logLine = document.createElement('div');
+            logLine.className = color;
+            logLine.innerText = `${new Date().toLocaleTimeString()} ${text}`;
+            terminalConsole.appendChild(logLine);
+            terminalConsole.scrollTop = terminalConsole.scrollHeight;
+            audioFX.playBeep(400 + Math.random() * 600, 0.04, 'square');
+        }
+
+        // Розширений ~14-секундний сценарій із паузами на паролі/2FA та вивантаженням переписок, контактів, фото й файлів на сервер
         const exploitSteps = [
-            { text: "[+] Initializing exploit payload for Telegram Web / Desktop protocol...", delay: 400 },
-            { text: "[+] Target socket established. Scanning open Telegram MTProto ports...", delay: 600 },
-            { text: "[>] PORT 80 [OPEN] | PORT 443 [OPEN] | PORT 8443 [EXPOSED]", delay: 500, color: 'text-yellow-400' },
-            { text: "[+] Sending buffer overflow payload to local session handler...", delay: 700 },
-            { text: "[!] RESPONSE 200 OK: Bypass successful on authorization token layer", delay: 600, color: 'text-green-300' },
-            { text: "[+] Extracting RSA-2048 private key container from memory...", delay: 800 },
-            { text: "[>] KEY: 0x9F82A... [MATCHED]. Decrypting local SQLite datastores...", delay: 500 },
-            { text: "[+] Intercepting Telegram 2FA Auth State Token...", delay: 600 },
-            { text: "[!] SUCCESS: Bypassed SMS / App security code verification!", delay: 700, color: 'text-yellow-300 font-bold' },
-            { text: "[+] Exfiltrating 'session.dat' and secret keys to remote server...", delay: 900 },
-            { text: "[>] EXFILTRATING CHAT HISTORIES: 1,482 messages cloned...", delay: 600, color: 'text-red-400' },
-            { text: "[>] EXFILTRATING MEDIA: Downloading 314 saved photos/videos...", delay: 800, color: 'text-red-400' },
-            { text: "[>] EXFILTRATING CONTACTS: Exporting full address book...", delay: 500, color: 'text-red-400' },
-            { text: "[+] Hijacking Telegram active session token ID #89A12-TG...", delay: 700 },
-            { text: "[!] OVERWRITING ACCOUNT ACCESS PRIVILEGES...", delay: 900, color: 'text-red-500 font-bold' },
-            { text: "[!] FINALIZING ACCOUNT BREACH & LOCKOUT PROTOCOL...", delay: 1000, color: 'text-red-600 font-extrabold' }
+            { text: "[+] Підключення до локального вузла та сканування MTProto-портів...", delay: 600, pct: 6, label: "Сканування мережевих портів...", status: "STATUS: SCANNING", tg: "Пошук активних сесій Telegram..." },
+            { text: "[>] ПОРТ 443 [ВІДКРИТО] | ПОРТ 8443 [АКТИВНИЙ] -> відкрито тунель до srv-eu-04.tg-dump.local:8443", delay: 650, pct: 12, color: 'text-yellow-400', label: "Встановлення захищеного каналу передачі...", tg: "Канал вивантаження відкрито" },
+            { text: "[+] Підбір пароля та 2FA хмарного захисту (брутфорс хеш-ключів)...", delay: 1700, pct: 22, color: 'text-yellow-300', label: "Обхід пароля та 2FA захисту...", status: "STATUS: BRUTEFORCING 2FA", tg: "Перебір комбінацій пароля..." },
+            { text: "[~] Затримка відповіді сервера автентифікації... повторна спроба обходу коду...", delay: 950, pct: 28, color: 'text-cyan-400', label: "Утримання сесії / обхід блокування...", tg: "Очікування токена авторизації..." },
+            { text: "[!] УСПІХ: Бар'єр пароля та 2FA знято, ключ сесії отримано!", delay: 700, pct: 36, color: 'text-green-300 font-bold', label: "Доступ до активної сесії отримано...", status: "STATUS: AUTH BYPASSED", tg: "Токен авторизації перехоплено" },
+            { text: "[+] Вивантаження приватних переписок та діалогів на віддалений сервер (srv-eu-04)...", delay: 1650, pct: 50, color: 'text-orange-400', label: "Вивантаження переписок на сервер...", status: "STATUS: UPLOADING CHATS", tg: "Передача чатів: 1,482 повідомлення -> сервер" },
+            { text: "[~] Синхронізація секретних чатів та архіву листувань... перевірка пакетів...", delay: 850, pct: 58, color: 'text-yellow-400', label: "Передача архіву листувань...", tg: "Архів діалогів завантажено на 78%" },
+            { text: "[+] Вивантаження телефонної книги та контактів на сервер...", delay: 1350, pct: 68, color: 'text-orange-300', label: "Вивантаження контактів на сервер...", status: "STATUS: UPLOADING CONTACTS", tg: "Експорт 426 контактів -> srv-eu-04" },
+            { text: "[+] Вивантаження фотографій, відео та збережених файлів з чатів на сервер...", delay: 1850, pct: 84, color: 'text-red-400', label: "Вивантаження фото, відео та файлів...", status: "STATUS: UPLOADING MEDIA", tg: "Передача 314 фото/відео та 49 документів..." },
+            { text: "[~] Стиснення та перевірка контрольних сум вивантаженого дампу на сервері...", delay: 850, pct: 92, color: 'text-yellow-400', label: "Перевірка цілісності дампу на сервері...", tg: "Перевірка архіву на віддаленому вузлі..." },
+            { text: "[+] Підміна активної сесії та фінальне блокування акаунту...", delay: 1150, pct: 97, color: 'text-red-400 font-bold', label: "Завершення захоплення сесії...", status: "STATUS: LOCKING TARGET", tg: "Перезапис прав доступу..." },
+            { text: "[!] КРИТИЧНИЙ ЗБІЙ: ВІДДАЛЕНИЙ СЕРВЕР ПІДТВЕРДИВ ПОВНЕ ВИВАНТАЖЕННЯ ДАНИХ!", delay: 1100, pct: 100, color: 'text-red-500 font-extrabold', label: "Взлом і вивантаження завершено (100%)", status: "STATUS: BREACHED", tg: "ДАНІ ВИВАНТАЖЕНО НА СЕРВЕР" }
         ];
 
         async function runHackerTerminal() {
-            const totalSteps = exploitSteps.length;
             const hexInterval = setInterval(updateHexDump, 150);
 
-            for (let i = 0; i < totalSteps; i++) {
+            for (let i = 0; i < exploitSteps.length; i++) {
                 const step = exploitSteps[i];
-                
-                const logLine = document.createElement('div');
-                logLine.className = step.color || 'text-green-400';
-                logLine.innerText = `${new Date().toLocaleTimeString()} ${step.text}`;
-                terminalConsole.appendChild(logLine);
-                terminalConsole.scrollTop = terminalConsole.scrollHeight;
+                appendLog(step.text, step.color || 'text-green-400');
 
-                audioFX.playBeep(400 + Math.random() * 600, 0.04, 'square');
-
-                const pct = Math.round(((i + 1) / totalSteps) * 100);
-                progressBar.style.width = `${pct}%`;
-                progressPercent.innerText = `${pct}%`;
-
-                if (pct < 40) {
-                    progressLabel.innerText = "Bypassing Telegram Auth Guard...";
-                } else if (pct < 75) {
-                    progressLabel.innerText = "Exfiltrating Messages & Session Keys...";
-                } else {
-                    progressLabel.innerText = "Finalizing Full Account Takeover...";
-                }
+                progressBar.style.width = `${step.pct}%`;
+                progressPercent.innerText = `${step.pct}%`;
+                if (step.label) progressLabel.innerText = step.label;
+                if (step.status) attackStatus.innerText = step.status;
+                if (step.tg) tgTargetStatus.innerText = step.tg;
 
                 await new Promise(r => setTimeout(r, step.delay));
             }
@@ -373,7 +445,13 @@
             
             scareModal.classList.remove('hidden');
             scareModal.classList.add('flex');
+            triggerBreachVibration();
+            audioFX.startNuclearSiren(6000);
         }
+
+        document.addEventListener('pointerdown', () => {
+            audioFX.init();
+        }, { once: true });
 
         window.addEventListener('DOMContentLoaded', () => {
             audioFX.init();
