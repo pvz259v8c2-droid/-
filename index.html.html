@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Diagnostic Tool v4.02</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600;700&display=swap');
+        
+        body {
+            font-family: 'Fira Code', monospace;
+            background-color: #030712;
+            color: #22c55e;
+            user-select: none;
+        }
+
+        /* Scanline Overlay */
+        .crt::before {
+            content: " ";
+            display: block;
+            position: fixed;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 40;
+            background-size: 100% 3px, 6px 100%;
+            pointer-events: none;
+        }
+
+        /* Glitch Animation */
+        @keyframes glitch {
+            0% { transform: translate(0); }
+            20% { transform: translate(-3px, 3px); }
+            40% { transform: translate(-3px, -3px); }
+            60% { transform: translate(3px, 3px); }
+            80% { transform: translate(3px, -3px); }
+            100% { transform: translate(0); }
+        }
+
+        .glitch-active {
+            animation: glitch 0.15s infinite;
+        }
+
+        /* Red strobe climax effect */
+        @keyframes strobe {
+            0%, 100% { background-color: #000; }
+            50% { background-color: #450a0a; }
+        }
+
+        .strobe-mode {
+            animation: strobe 0.2s infinite;
+        }
+
+        /* Custom Scrollbar for Terminals */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #030712;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #15803d;
+            border-radius: 2px;
+        }
+    </style>
+</head>
+<body class="crt min-h-screen w-full overflow-x-hidden overflow-y-auto relative flex flex-col justify-between p-2 md:p-4 text-xs md:text-sm">
+
+    <!-- AUDIO CONTROLS & HEADER -->
+    <header class="flex justify-between items-center border-b border-green-800/60 pb-2 z-30 bg-gray-950/80 px-3 py-2 rounded">
+        <div class="flex items-center space-x-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
+            <span class="font-bold tracking-wider text-green-400 uppercase text-[10px] sm:text-xs md:text-sm">CYBER-EXPLOIT KERNEL v8.9.1 [MTPROTO EXPLOITER]</span>
+        </div>
+        <div class="flex items-center space-x-4">
+            <button id="sound-toggle" class="text-xs bg-green-950 border border-green-600/50 hover:bg-green-900 text-green-300 px-2 py-1 rounded transition">
+                🔊 SOUND: ON
+            </button>
+            <span id="system-clock" class="text-green-500 font-mono hidden md:inline">00:00:00 UTC</span>
+        </div>
+    </header>
+
+    <!-- START PROMPT OVERLAY (Mandatory interaction for fullscreen & Web Audio activation) -->
+    <div id="start-overlay" class="fixed inset-0 bg-black/95 z-50 flex flex-col items-center justify-center p-6 text-center">
+        <div class="max-w-md border border-green-600/40 bg-gray-900/90 p-6 rounded-lg shadow-2xl shadow-green-900/20">
+            <div class="text-green-500 text-5xl mb-4">🛡️</div>
+            <h1 class="text-xl font-bold text-green-400 mb-2">НЕОБХІДНА ПЕРЕВІРКА СИСТЕМИ</h1>
+            <p class="text-gray-400 text-xs mb-6 leading-relaxed">
+                Для підключення до захищеного вузла діагностики мережі потрібно підтвердити сесію браузера. Натисніть кнопку нижче для запуску.
+            </p>
+            <button id="start-btn" class="w-full bg-green-600 hover:bg-green-500 text-black font-extrabold py-3 px-6 rounded shadow-lg shadow-green-600/30 tracking-wider transition uppercase transform active:scale-95">
+                ▶ Запустити діагностику
+            </button>
+        </div>
+    </div>
+
+    <!-- MAIN TERMINAL DASHBOARD -->
+    <main class="grid grid-cols-1 lg:grid-cols-3 gap-3 my-2 flex-grow z-20">
+        
+        <!-- LEFT COLUMN: System Intelligence & Device Specs -->
+        <section class="border border-green-900/70 bg-black/80 p-3 rounded flex flex-col justify-between">
+            <div>
+                <h2 class="text-green-400 font-bold border-b border-green-900/80 pb-1 mb-2 flex items-center">
+                    <span class="mr-2">🔍</span> TARGET IDENTIFICATION
+                </h2>
+                <div id="device-info-list" class="space-y-1.5 text-xs text-green-300/80 font-mono">
+                    <div>[>] PUBLIC IP: <span id="info-ip" class="text-yellow-400 font-bold">Scanning...</span></div>
+                    <div>[>] OS / PLATFORM: <span id="info-os" class="text-white">Detecting...</span></div>
+                    <div>[>] BROWSER USER-AGENT: <span id="info-ua" class="text-gray-400 break-all">Detecting...</span></div>
+                    <div>[>] DISPLAY RESOLUTION: <span id="info-res" class="text-white">Detecting...</span></div>
+                    <div>[>] CPU CORES / THREADS: <span id="info-cpu" class="text-white">Detecting...</span></div>
+                    <div>[>] GPU RENDERER: <span id="info-gpu" class="text-gray-300">Detecting...</span></div>
+                    <div>[>] TIMEZONE & LOCALE: <span id="info-tz" class="text-white">Detecting...</span></div>
+                    <div>[>] TG SESSIONS DETECTED: <span id="info-tg" class="text-red-400 font-bold">3 ACTIVE</span></div>
+                </div>
+            </div>
+
+            <!-- HEX MEMORY DUMP MATRIX -->
+            <div class="mt-3 border-t border-green-900/50 pt-2">
+                <div class="text-[10px] text-green-600 mb-1 font-bold">LIVE MEMORY BUFFER DUMP (RAM EXFIL)</div>
+                <div id="hex-dump" class="text-[10px] text-green-500/60 font-mono h-28 overflow-hidden leading-tight break-all">
+                    0x00000000  7f 45 4c 46 02 01 01 00  00 00 00 00 00 00 00 00  |.ELF............|
+                </div>
+            </div>
+        </section>
+
+        <!-- CENTER COLUMN: Main Exploit Execution Console -->
+        <section class="lg:col-span-2 border border-green-900/70 bg-black/90 p-3 rounded flex flex-col justify-between relative overflow-hidden">
+            <div class="flex justify-between items-center border-b border-green-900/80 pb-1 mb-2">
+                <h2 class="text-green-400 font-bold flex items-center">
+                    <span class="mr-2">💻</span> EXPLOIT EXECUTION CONSOLE
+                </h2>
+                <span id="attack-status" class="text-[10px] bg-red-950 text-red-400 px-2 py-0.5 rounded border border-red-800 animate-pulse">
+                    STATUS: INITIALIZING
+                </span>
+            </div>
+
+            <!-- Terminal Stream Scroll Area -->
+            <div id="terminal-console" class="flex-grow font-mono text-xs overflow-y-auto space-y-1 my-1 pr-2 min-h-[220px] max-h-[50vh]">
+                <div class="text-gray-500">[SYSTEM INIT] Mounting MTProto zero-day exploit framework...</div>
+            </div>
+
+            <!-- Progress Bar Section -->
+            <div class="border-t border-green-900/80 pt-2 mt-2">
+                <div class="flex justify-between text-xs mb-1">
+                    <span id="progress-label" class="text-green-400 font-bold">Bypassing Telegram Auth Guard...</span>
+                    <span id="progress-percent" class="text-green-300 font-bold">0%</span>
+                </div>
+                <div class="w-full bg-gray-950 border border-green-900 rounded-full h-3 overflow-hidden p-0.5">
+                    <div id="progress-bar" class="bg-gradient-to-r from-green-600 via-yellow-500 to-red-600 h-full w-0 transition-all duration-150 rounded-full"></div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER TELEGRAM HIJACK LOGS -->
+    <footer class="border border-green-900/60 bg-gray-950/90 p-2 rounded z-20 flex flex-wrap justify-between items-center text-[11px] mt-2">
+        <div class="flex items-center space-x-2">
+            <span class="text-red-500 font-bold animate-pulse">● TELEGRAM TARGET DATA:</span>
+            <span id="tg-target-status" class="text-gray-300">Awaiting Auth Tokens...</span>
+        </div>
+        <div class="text-gray-500 hidden sm:block">
+            SESSION_ID: <span class="text-green-400">0x89F2A1C0B4</span> | ENCRYPTION: <span class="text-red-400">COMPROMISED</span>
+        </div>
+    </footer>
+
+    <!-- FINAL SCARE OVERLAY (Permanent Lockout Notification) -->
+    <div id="scare-modal" class="fixed inset-0 bg-black z-50 hidden flex-col items-center justify-center p-4 md:p-6 text-center select-none overflow-y-auto">
+        <div class="max-w-3xl border-2 border-red-600 bg-red-950/40 backdrop-blur-md p-6 md:p-10 rounded-xl shadow-2xl shadow-red-900/80 relative my-auto">
+            <div class="text-red-500 text-6xl md:text-9xl mb-4 animate-bounce">☠️</div>
+            
+            <h1 class="text-xl md:text-5xl font-black text-red-500 tracking-wider mb-4 uppercase glitch-active" data-text="УВАГА: ВАШ TELEGRAM АККАУНТ ВЗЛОМАНО!">
+                УВАГА: ВАШ TELEGRAM АККАУНТ ВЗЛОМАНО!
+            </h1>
+            
+            <p class="text-red-200 text-xs md:text-lg mb-6 leading-relaxed font-mono">
+                Усі ваші особисті листування, приватні фотографії, контакти та збережені файли успішно вивантажено на віддалений хакерський сервер.
+            </p>
+
+            <!-- Dynamic Exfiltrated Victim Info Display -->
+            <div class="bg-black/90 border border-red-800/80 p-4 rounded text-left font-mono text-xs md:text-sm text-red-400 space-y-1 mb-6">
+                <div>[!] TARGET IP: <span id="final-ip" class="text-white font-bold">127.0.0.1</span></div>
+                <div>[!] DEVICE OS: <span id="final-os" class="text-white">Unknown</span></div>
+                <div>[!] LOCATION: <span id="final-loc" class="text-white">Detected via GeoIP</span></div>
+                <div>[!] EXFILTRATED DATA: <span class="text-yellow-400 font-bold">Telegram session.dat, Auth Tokens, Contacts, Chat History</span></div>
+                <div>[!] STATUS: <span class="text-red-500 font-bold animate-pulse">DEVICE TERMINATED & LOCKED</span></div>
+            </div>
+
+            <div class="text-xs text-red-500 font-mono tracking-widest animate-pulse border-t border-red-900 pt-3">
+                ПРИСТРІЙ ЗАБЛОКОВАНО. СПРОБА ПЕРЕЗАВАНТАЖЕННЯ АНУЛЮЄ КЛЮЧІ ВІДНОВЛЕННЯ.
+            </div>
+        </div>
+    </div>
+
+    <!-- AUDIO SYNTHESIZER & SCRIPT LOGIC -->
+    <script>
+        // Web Audio API Synthesizer (No external MP3 files needed)
+        class SoundEffects {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+
+            playBeep(freq = 800, duration = 0.05, type = 'sine') {
+                if (this.muted || !this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch(e){}
+            }
+
+            playAlarm() {
+                if (this.muted || !this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(900, this.ctx.currentTime);
+                    osc.frequency.linearRampToValueAtTime(400, this.ctx.currentTime + 0.3);
+                    gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.3);
+                } catch(e){}
+            }
+        }
+
+        const audioFX = new SoundEffects();
+
+        // UI DOM References
+        const startOverlay = document.getElementById('start-overlay');
+        const startBtn = document.getElementById('start-btn');
+        const soundToggle = document.getElementById('sound-toggle');
+        const terminalConsole = document.getElementById('terminal-console');
+        const progressBar = document.getElementById('progress-bar');
+        const progressPercent = document.getElementById('progress-percent');
+        const progressLabel = document.getElementById('progress-label');
+        const hexDumpEl = document.getElementById('hex-dump');
+        const scareModal = document.getElementById('scare-modal');
+
+        // Sound Toggle Button
+        soundToggle.addEventListener('click', () => {
+            audioFX.muted = !audioFX.muted;
+            soundToggle.innerText = audioFX.muted ? "🔇 SOUND: OFF" : "🔊 SOUND: ON";
+        });
+
+        // Real Device Intelligence Gathering
+        async function fetchSystemSpecs() {
+            // Resolution
+            document.getElementById('info-res').innerText = `${window.screen.width}x${window.screen.height} (${window.devicePixelRatio}x DPI)`;
+            
+            // Platform / OS
+            const platform = navigator.platform || 'Unknown OS';
+            document.getElementById('info-os').innerText = platform;
+            document.getElementById('final-os').innerText = platform;
+
+            // User Agent
+            document.getElementById('info-ua').innerText = navigator.userAgent.substring(0, 45) + '...';
+
+            // Cores
+            document.getElementById('info-cpu').innerText = `${navigator.hardwareConcurrency || 4} Logical Cores`;
+
+            // Timezone
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+            document.getElementById('info-tz').innerText = `${tz} (${navigator.language})`;
+            document.getElementById('final-loc').innerText = tz;
+
+            // WebGL GPU Renderer Detection
+            try {
+                const canvas = document.createElement('canvas');
+                const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+                if (gl) {
+                    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                    if (debugInfo) {
+                        const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                        document.getElementById('info-gpu').innerText = renderer.substring(0, 30);
+                    }
+                }
+            } catch (e) {
+                document.getElementById('info-gpu').innerText = 'Standard Accelerator';
+            }
+
+            // Public IP Fetch
+            try {
+                const res = await fetch('https://api.ipify.org?format=json');
+                const data = await res.json();
+                document.getElementById('info-ip').innerText = data.ip;
+                document.getElementById('final-ip').innerText = data.ip;
+            } catch (e) {
+                const fallbackIp = `195.178.${Math.floor(Math.random()*254)}.${Math.floor(Math.random()*254)}`;
+                document.getElementById('info-ip').innerText = fallbackIp;
+                document.getElementById('final-ip').innerText = fallbackIp;
+            }
+        }
+
+        // Live Clock
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('system-clock').innerText = now.toTimeString().split(' ')[0] + ' UTC';
+        }, 1000);
+
+        // Continuous HEX Dump Stream Generator
+        function updateHexDump() {
+            let hexStr = '';
+            for (let i = 0; i < 8; i++) {
+                let offset = (Math.floor(Math.random() * 65535)).toString(16).padStart(8, '0');
+                let bytes = Array.from({length: 8}, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join(' ');
+                hexStr += `0x${offset}  ${bytes}
+`;
+            }
+            hexDumpEl.innerText = hexStr;
+        }
+
+        // Exploit Logs Script sequence
+        const exploitSteps = [
+            { text: "[+] Initializing exploit payload for Telegram Web / Desktop protocol...", delay: 400 },
+            { text: "[+] Target socket established. Scanning open Telegram MTProto ports...", delay: 600 },
+            { text: "[>] PORT 80 [OPEN] | PORT 443 [OPEN] | PORT 8443 [EXPOSED]", delay: 500, color: 'text-yellow-400' },
+            { text: "[+] Sending buffer overflow payload to local session handler...", delay: 700 },
+            { text: "[!] RESPONSE 200 OK: Bypass successful on authorization token layer", delay: 600, color: 'text-green-300' },
+            { text: "[+] Extracting RSA-2048 private key container from memory...", delay: 800 },
+            { text: "[>] KEY: 0x9F82A... [MATCHED]. Decrypting local SQLite datastores...", delay: 500 },
+            { text: "[+] Intercepting Telegram 2FA Auth State Token...", delay: 600 },
+            { text: "[!] SUCCESS: Bypassed SMS / App security code verification!", delay: 700, color: 'text-yellow-300 font-bold' },
+            { text: "[+] Exfiltrating 'session.dat' and secret keys to remote server...", delay: 900 },
+            { text: "[>] EXFILTRATING CHAT HISTORIES: 1,482 messages cloned...", delay: 600, color: 'text-red-400' },
+            { text: "[>] EXFILTRATING MEDIA: Downloading 314 saved photos/videos...", delay: 800, color: 'text-red-400' },
+            { text: "[>] EXFILTRATING CONTACTS: Exporting full address book...", delay: 500, color: 'text-red-400' },
+            { text: "[+] Hijacking Telegram active session token ID #89A12-TG...", delay: 700 },
+            { text: "[!] OVERWRITING ACCOUNT ACCESS PRIVILEGES...", delay: 900, color: 'text-red-500 font-bold' },
+            { text: "[!] FINALIZING ACCOUNT BREACH & LOCKOUT PROTOCOL...", delay: 1000, color: 'text-red-600 font-extrabold' }
+        ];
+
+        // Start Prank Sequence
+        startBtn.addEventListener('click', async () => {
+            audioFX.init();
+            startOverlay.classList.add('hidden');
+
+            // Attempt Fullscreen
+            try {
+                if (document.documentElement.requestFullscreen) {
+                    document.documentElement.requestFullscreen();
+                }
+            } catch(e){}
+
+            fetchSystemSpecs();
+            runHackerTerminal();
+        });
+
+        // Terminal Execution Logic
+        async function runHackerTerminal() {
+            const totalSteps = exploitSteps.length;
+            
+            // Hex update interval
+            const hexInterval = setInterval(updateHexDump, 150);
+
+            for (let i = 0; i < totalSteps; i++) {
+                const step = exploitSteps[i];
+                
+                // Add log entry
+                const logLine = document.createElement('div');
+                logLine.className = step.color || 'text-green-400';
+                logLine.innerText = `${new Date().toLocaleTimeString()} ${step.text}`;
+                terminalConsole.appendChild(logLine);
+                terminalConsole.scrollTop = terminalConsole.scrollHeight;
+
+                // Play typing bleep
+                audioFX.playBeep(400 + Math.random() * 600, 0.04, 'square');
+
+                // Update Progress Bar
+                const pct = Math.round(((i + 1) / totalSteps) * 100);
+                progressBar.style.width = `${pct}%`;
+                progressPercent.innerText = `${pct}%`;
+
+                if (pct < 40) {
+                    progressLabel.innerText = "Bypassing Telegram Auth Guard...";
+                } else if (pct < 75) {
+                    progressLabel.innerText = "Exfiltrating Messages & Session Keys...";
+                } else {
+                    progressLabel.innerText = "Finalizing Full Account Takeover...";
+                }
+
+                await new Promise(r => setTimeout(r, step.delay));
+            }
+
+            clearInterval(hexInterval);
+            triggerFinalScare();
+        }
+
+        // Final Climax Strobe and Lock Screen
+        async function triggerFinalScare() {
+            document.body.classList.add('strobe-mode');
+            
+            // Play rapid alarms
+            for (let i = 0; i < 6; i++) {
+                audioFX.playAlarm();
+                await new Promise(r => setTimeout(r, 200));
+            }
+
+            document.body.classList.remove('strobe-mode');
+            
+            // Show Permanent Scare Modal
+            scareModal.classList.remove('hidden');
+            scareModal.classList.add('flex');
+        }
+    </script>
+</body>
+</html>
