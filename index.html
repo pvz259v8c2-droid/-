@@ -80,20 +80,6 @@
         </div>
     </header>
 
-    <!-- START PROMPT OVERLAY (Mandatory interaction for fullscreen & Web Audio activation) -->
-    <div id="start-overlay" class="fixed inset-0 bg-black/95 z-50 flex flex-col items-center justify-center p-6 text-center">
-        <div class="max-w-md border border-green-600/40 bg-gray-900/90 p-6 rounded-lg shadow-2xl shadow-green-900/20">
-            <div class="text-green-500 text-5xl mb-4">🛡️</div>
-            <h1 class="text-xl font-bold text-green-400 mb-2">НЕОБХІДНА ПЕРЕВІРКА СИСТЕМИ</h1>
-            <p class="text-gray-400 text-xs mb-6 leading-relaxed">
-                Для підключення до захищеного вузла діагностики мережі потрібно підтвердити сесію браузера. Натисніть кнопку нижче для запуску.
-            </p>
-            <button id="start-btn" class="w-full bg-green-600 hover:bg-green-500 text-black font-extrabold py-3 px-6 rounded shadow-lg shadow-green-600/30 tracking-wider transition uppercase transform active:scale-95">
-                ▶ Запустити діагностику
-            </button>
-        </div>
-    </div>
-
     <!-- MAIN TERMINAL DASHBOARD -->
     <main class="grid grid-cols-1 lg:grid-cols-3 gap-3 my-2 flex-grow z-20">
         
@@ -195,7 +181,6 @@
 
     <!-- AUDIO SYNTHESIZER & SCRIPT LOGIC -->
     <script>
-        // Web Audio API Synthesizer (No external MP3 files needed)
         class SoundEffects {
             constructor() {
                 this.ctx = null;
@@ -204,12 +189,20 @@
 
             init() {
                 if (!this.ctx) {
-                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) {
+                        this.ctx = new AudioCtx();
+                    }
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume().catch(() => {});
                 }
             }
 
             playBeep(freq = 800, duration = 0.05, type = 'sine') {
-                if (this.muted || !this.ctx) return;
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx || this.ctx.state !== 'running') return;
                 try {
                     const osc = this.ctx.createOscillator();
                     const gain = this.ctx.createGain();
@@ -225,7 +218,9 @@
             }
 
             playAlarm() {
-                if (this.muted || !this.ctx) return;
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx || this.ctx.state !== 'running') return;
                 try {
                     const osc = this.ctx.createOscillator();
                     const gain = this.ctx.createGain();
@@ -244,9 +239,6 @@
 
         const audioFX = new SoundEffects();
 
-        // UI DOM References
-        const startOverlay = document.getElementById('start-overlay');
-        const startBtn = document.getElementById('start-btn');
         const soundToggle = document.getElementById('sound-toggle');
         const terminalConsole = document.getElementById('terminal-console');
         const progressBar = document.getElementById('progress-bar');
@@ -255,34 +247,26 @@
         const hexDumpEl = document.getElementById('hex-dump');
         const scareModal = document.getElementById('scare-modal');
 
-        // Sound Toggle Button
         soundToggle.addEventListener('click', () => {
             audioFX.muted = !audioFX.muted;
+            if (!audioFX.muted) audioFX.init();
             soundToggle.innerText = audioFX.muted ? "🔇 SOUND: OFF" : "🔊 SOUND: ON";
         });
 
-        // Real Device Intelligence Gathering
         async function fetchSystemSpecs() {
-            // Resolution
             document.getElementById('info-res').innerText = `${window.screen.width}x${window.screen.height} (${window.devicePixelRatio}x DPI)`;
             
-            // Platform / OS
             const platform = navigator.platform || 'Unknown OS';
             document.getElementById('info-os').innerText = platform;
             document.getElementById('final-os').innerText = platform;
 
-            // User Agent
             document.getElementById('info-ua').innerText = navigator.userAgent.substring(0, 45) + '...';
-
-            // Cores
             document.getElementById('info-cpu').innerText = `${navigator.hardwareConcurrency || 4} Logical Cores`;
 
-            // Timezone
             const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
             document.getElementById('info-tz').innerText = `${tz} (${navigator.language})`;
             document.getElementById('final-loc').innerText = tz;
 
-            // WebGL GPU Renderer Detection
             try {
                 const canvas = document.createElement('canvas');
                 const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
@@ -297,7 +281,6 @@
                 document.getElementById('info-gpu').innerText = 'Standard Accelerator';
             }
 
-            // Public IP Fetch
             try {
                 const res = await fetch('https://api.ipify.org?format=json');
                 const data = await res.json();
@@ -310,25 +293,21 @@
             }
         }
 
-        // Live Clock
         setInterval(() => {
             const now = new Date();
             document.getElementById('system-clock').innerText = now.toTimeString().split(' ')[0] + ' UTC';
         }, 1000);
 
-        // Continuous HEX Dump Stream Generator
         function updateHexDump() {
             let hexStr = '';
             for (let i = 0; i < 8; i++) {
                 let offset = (Math.floor(Math.random() * 65535)).toString(16).padStart(8, '0');
                 let bytes = Array.from({length: 8}, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0')).join(' ');
-                hexStr += `0x${offset}  ${bytes}
-`;
+                hexStr += `0x${offset}  ${bytes}\n`;
             }
             hexDumpEl.innerText = hexStr;
         }
 
-        // Exploit Logs Script sequence
         const exploitSteps = [
             { text: "[+] Initializing exploit payload for Telegram Web / Desktop protocol...", delay: 400 },
             { text: "[+] Target socket established. Scanning open Telegram MTProto ports...", delay: 600 },
@@ -348,43 +327,21 @@
             { text: "[!] FINALIZING ACCOUNT BREACH & LOCKOUT PROTOCOL...", delay: 1000, color: 'text-red-600 font-extrabold' }
         ];
 
-        // Start Prank Sequence
-        startBtn.addEventListener('click', async () => {
-            audioFX.init();
-            startOverlay.classList.add('hidden');
-
-            // Attempt Fullscreen
-            try {
-                if (document.documentElement.requestFullscreen) {
-                    document.documentElement.requestFullscreen();
-                }
-            } catch(e){}
-
-            fetchSystemSpecs();
-            runHackerTerminal();
-        });
-
-        // Terminal Execution Logic
         async function runHackerTerminal() {
             const totalSteps = exploitSteps.length;
-            
-            // Hex update interval
             const hexInterval = setInterval(updateHexDump, 150);
 
             for (let i = 0; i < totalSteps; i++) {
                 const step = exploitSteps[i];
                 
-                // Add log entry
                 const logLine = document.createElement('div');
                 logLine.className = step.color || 'text-green-400';
                 logLine.innerText = `${new Date().toLocaleTimeString()} ${step.text}`;
                 terminalConsole.appendChild(logLine);
                 terminalConsole.scrollTop = terminalConsole.scrollHeight;
 
-                // Play typing bleep
                 audioFX.playBeep(400 + Math.random() * 600, 0.04, 'square');
 
-                // Update Progress Bar
                 const pct = Math.round(((i + 1) / totalSteps) * 100);
                 progressBar.style.width = `${pct}%`;
                 progressPercent.innerText = `${pct}%`;
@@ -404,11 +361,9 @@
             triggerFinalScare();
         }
 
-        // Final Climax Strobe and Lock Screen
         async function triggerFinalScare() {
             document.body.classList.add('strobe-mode');
             
-            // Play rapid alarms
             for (let i = 0; i < 6; i++) {
                 audioFX.playAlarm();
                 await new Promise(r => setTimeout(r, 200));
@@ -416,10 +371,15 @@
 
             document.body.classList.remove('strobe-mode');
             
-            // Show Permanent Scare Modal
             scareModal.classList.remove('hidden');
             scareModal.classList.add('flex');
         }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            audioFX.init();
+            fetchSystemSpecs();
+            runHackerTerminal();
+        });
     </script>
 </body>
 </html>
